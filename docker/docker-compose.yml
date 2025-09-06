@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  sern-mil:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: sern-mil:latest
+    volumes:
+      - ..:/workspace
+    working_dir: /workspace
+    tty: true
