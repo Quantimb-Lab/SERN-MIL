@@ -1,0 +1,11 @@
+dataset:
+  name: PANDA
+  task: external_ood_grading
+  split_file: data/splits/panda_external.csv
+  classes:
+    - isup0
+    - isup1
+    - isup2
+    - isup3
+    - isup4
+    - isup5
