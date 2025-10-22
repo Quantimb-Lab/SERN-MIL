@@ -1,0 +1,71 @@
+project:
+  name: sern_mil
+  seed: 1337
+  experiment: baseline_sern_mil
+
+paths:
+  root: .
+  data_root: data
+  wsis_dir: data/wsi
+  labels_dir: data/labels
+  splits_dir: data/splits
+  checkpoints_dir: checkpoints
+  data_index_dir: data_index
+  artifacts_dir: artifacts
+  logs_dir: artifacts/logs
+  preproc_manifest: data_index/preprocess_manifest.jsonl
+  clam_manifest: data_index/clam_features_manifest.jsonl
+  cellvit_manifest: data_index/cellvit_features_manifest.jsonl
+  fused_manifest: data_index/fused_features_manifest.jsonl
+
+preprocess:
+  target_mpp: 0.50
+  tissue_level: 4
+  tile_size: 4096
+  patch_size: 256
+  min_tissue_ratio: 0.10
+  tissue_method: otsu_morphology
+  morphology_open_kernel: 3
+  hole_fill: true
+  normalize_orientation: true
+  save_patch_coords_only: true
+
+clam:
+  encoder_name: kimianet
+  output_dim: 1024
+  output_format: pt
+  batch_size: 256
+  num_workers: 8
+
+cellvit:
+  checkpoint: checkpoints/cellvit_finetuned.ckpt
+  output_dim: 128
+  cluster_k: 4
+  batch_size: 128
+  num_workers: 8
+
+fusion:
+  method: concat_linear
+  output_dim: 1024
+  on_missing_nuclei: zeros
+
+ser:
+  patch_embed_dim: 1024
+  latent_dim: 1024
+  num_latents: 64
+  num_transformer_blocks: 6
+  boundary_loss_weight: 0.3
+  tumor_loss_weight: 0.7
+
+mil:
+  hidden_dim: 512
+  num_classes: 4
+  attention_dropout: 0.1
+
+training:
+  epochs: 100
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  mixed_precision: true
+  grad_clip_norm: 1.0
+  early_stop_patience: 15
