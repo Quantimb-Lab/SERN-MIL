@@ -1,0 +1,13 @@
+model:
+  name: sern_mil
+  ser:
+    backbone: kimianet
+    perceiver_latents: 64
+    perceiver_dim: 1024
+  nfi:
+    source: cellvit
+    output_dim: 128
+    k_clusters: 4
+  mil:
+    type: region_attention
+    hidden_dim: 512

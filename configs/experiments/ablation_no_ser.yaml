@@ -1,0 +1,5 @@
+experiment:
+  name: ablation_no_ser
+  use_ser: false
+  use_nfi: true
+  nfi_k: 4
