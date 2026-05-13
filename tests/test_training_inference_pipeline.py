@@ -1,19 +1,82 @@
-from pathlib import Path
+import json
 
-from sern_mil.config import load_config
+import pytest
+import torch
+
+from sern_mil.config import build_model
+from sern_mil.data.cache import load_tensor_cache
 from sern_mil.inference.pipeline import InferencePipeline
+from sern_mil.training.loops import load_checkpoint_model
 from sern_mil.training.pipeline import TrainingPipeline
 
 
-def test_training_pipeline_runs() -> None:
-    cfg = load_config(Path("configs/training_pipeline.yaml"))
-    out = TrainingPipeline(cfg).run()
-    assert out.exists()
-    assert out.name == "training_run_summary.json"
+def test_missing_inputs_do_not_report_success(tiny_cfg):
+    with pytest.raises(FileNotFoundError):
+        TrainingPipeline(tiny_cfg).run()
+    assert not (tiny_cfg.path("paths.artifacts_dir") / "training_run_summary.json").exists()
+    with pytest.raises(FileNotFoundError):
+        InferencePipeline(tiny_cfg).run()
 
 
-def test_inference_pipeline_runs_batch() -> None:
-    cfg = load_config(Path("configs/inference_pipeline.yaml"))
-    out = InferencePipeline(cfg).run()
-    assert out.exists()
-    assert out.name == "inference_predictions.json"
+def test_all_four_stages_train_and_save_reloadable_checkpoints(tensor_data):
+    cfg = tensor_data
+    cfg.raw["training"]["stages"] = ["student", "ser", "mil", "survival"]
+    initial = build_model(cfg, "ser").tumor_head.project.weight.detach().clone()
+    summary_path = TrainingPipeline(cfg).run()
+    result = json.loads(summary_path.read_text())
+    assert [s["stage"] for s in result["stages"]] == [
+        "student",
+        "ser",
+        "mil",
+        "survival",
+        "survival",
+    ]
+    for stage in result["stages"]:
+        model, ckpt = load_checkpoint_model(stage["checkpoint"], stage["stage"])
+        assert ckpt["epoch"] >= 1 and ckpt["history"]
+        assert all(torch.isfinite(v).all() for v in model.state_dict().values())
+    trained = load_tensor_cache(cfg.path("inference.ser_checkpoint"))
+    assert not torch.equal(initial, trained["state_dict"]["tumor_head.project.weight"])
+    mil = load_tensor_cache(cfg.path("inference.mil_checkpoint"))
+    assert mil["history"][-1]["val"]["macro_f1"] >= 0
+    first = load_tensor_cache(cfg.path("paths.checkpoints_dir") / "survival_seed0.pt")
+    second = load_tensor_cache(cfg.path("paths.checkpoints_dir") / "survival_seed1.pt")
+    assert first["baseline"]["event_times"].tolist() == [1, 3]
+    assert not torch.equal(
+        first["state_dict"]["net.0.weight"], second["state_dict"]["net.0.weight"]
+    )
+
+
+def save_controlled_models(cfg, tumor_present):
+    ser = build_model(cfg, "ser")
+    mil = build_model(cfg, "mil")
+    for model in (ser, mil):
+        for param in model.parameters():
+            param.data.zero_()
+    ser.tumor_head.project.bias.data.fill_(10 if tumor_present else -10)
+    ser.boundary_head.project.bias.data.fill_(-10)
+    mil.mil.head[-1].bias.data[1] = 10  # controlled GP4 output
+    for stage, model in [("ser", ser), ("mil", mil)]:
+        path = cfg.path(f"inference.{stage}_checkpoint")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save({"stage": stage, "config": cfg.raw, "state_dict": model.state_dict()}, path)
+
+
+@pytest.mark.parametrize("tumor_present,expected", [(True, 4), (False, 0)])
+def test_inference_uses_predicted_masks_and_real_heads(tensor_data, tumor_present, expected):
+    cfg = tensor_data
+    save_controlled_models(cfg, tumor_present)
+    # Contradictory reference targets must have no effect on inference.
+    cache = cfg.root_dir / "p1.pt"
+    data = load_tensor_cache(cache)
+    data["tumor_target"].fill_(0 if tumor_present else 1)
+    data["label_mask"].fill_(5 if tumor_present else 3)
+    torch.save(data, cache)
+    slide = cfg.root_dir / "p1.svs"
+    slide.touch()
+    output = InferencePipeline(cfg).run(slide=slide)
+    record = json.loads(output.read_text())[0]
+    assert record["predicted_isup"] == expected
+    assert record["gleason_score"] == ("4+4" if tumor_present else None)
+    assert bool(record["regions"]) == tumor_present
+    assert all(r["gp"] == 4 for r in record["regions"])

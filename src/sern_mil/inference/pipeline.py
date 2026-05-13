@@ -1,56 +1,52 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import json
 from pathlib import Path
-from typing import Any
 
-from sern_mil.config import AppConfig
-from sern_mil.inference.predict_wsi import predict_slide
+from sern_mil.inference.predict_wsi import load_grading_models, predict_slide
 from sern_mil.utils.io import ensure_dir
-from sern_mil.utils.logging import get_logger
 
 
 @dataclass
 class InferencePipeline:
-    cfg: AppConfig
+    cfg: object
+    models: object = field(default=None, init=False)
 
-    def __post_init__(self) -> None:
-        self.logger = get_logger("inference_pipeline", self.cfg.path("paths.logs_dir"))
-
-    def run_single(self, slide_path: Path) -> dict[str, Any]:
-        if not slide_path.exists():
+    def run_single(self, slide_path):
+        slide_path = Path(slide_path)
+        if not slide_path.is_file():
             raise FileNotFoundError(f"Slide not found: {slide_path}")
-        pred = predict_slide(self.cfg, slide_path)
-        self.logger.info("Generated prediction for %s", slide_path)
-        return pred
+        if self.models is None:
+            self.models = load_grading_models(self.cfg)
+        return predict_slide(self.cfg, slide_path, self.models)
 
-    def run_batch(self, wsis_dir: Path) -> list[dict[str, Any]]:
-        if not wsis_dir.exists():
-            self.logger.warning("WSI directory does not exist: %s", wsis_dir)
-            return []
-        preds: list[dict[str, Any]] = []
-        for ext in ("*.svs", "*.tif", "*.tiff", "*.ndpi", "*.mrxs"):
-            for slide in sorted(wsis_dir.rglob(ext)):
-                preds.append(self.run_single(slide))
-        self.logger.info("Batch inference complete for %d slides", len(preds))
-        return preds
-
-    def save_predictions(self, predictions: list[dict[str, Any]], output_path: Path) -> Path:
-        ensure_dir(output_path.parent)
-        output_path.write_text(
-            __import__("json").dumps(predictions, ensure_ascii=True, indent=2), encoding="utf-8"
+    def run_batch(self, wsis_dir):
+        wsis_dir = Path(wsis_dir)
+        if not wsis_dir.is_dir():
+            raise FileNotFoundError(f"WSI directory not found: {wsis_dir}")
+        supported = {".svs", ".tif", ".tiff", ".ndpi", ".mrxs", ".png", ".jpg", ".jpeg"}
+        slides = sorted(
+            p for p in wsis_dir.rglob("*") if p.is_file() and p.suffix.lower() in supported
         )
-        self.logger.info("Saved predictions: %s", output_path)
+        if not slides:
+            raise ValueError("No slides found for inference")
+        return [self.run_single(slide) for slide in slides]
+
+    def save_predictions(self, predictions, output_path):
+        output_path = Path(output_path)
+        ensure_dir(output_path.parent)
+        output_path.write_text(json.dumps(predictions, indent=2, allow_nan=False), encoding="utf-8")
         return output_path
 
-    def run(self, slide: Path | None = None, wsis_dir: Path | None = None) -> Path:
-        if slide is None and wsis_dir is None:
-            wsis_dir = self.cfg.path("paths.wsis_dir")
-        output_path = self.cfg.path("paths.artifacts_dir") / "inference_predictions.json"
-
-        if slide is not None:
-            preds = [self.run_single(slide)]
-        else:
-            assert wsis_dir is not None
-            preds = self.run_batch(wsis_dir)
-        return self.save_predictions(preds, output_path)
+    def run(self, slide=None, wsis_dir=None):
+        if slide is not None and wsis_dir is not None:
+            raise ValueError("Choose one slide or a WSI folder")
+        predictions = (
+            [self.run_single(slide)]
+            if slide is not None
+            else self.run_batch(wsis_dir or self.cfg.path("paths.wsis_dir"))
+        )
+        return self.save_predictions(
+            predictions, self.cfg.path("paths.artifacts_dir") / "inference_predictions.json"
+        )

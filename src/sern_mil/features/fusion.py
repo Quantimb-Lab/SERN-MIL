@@ -1,36 +1,39 @@
-from __future__ import annotations
+"""Coordinate join for feature banks; final 2048-D fusion happens after SER."""
 
 from pathlib import Path
 
 
-def coord_key(row: dict) -> tuple[str, int, int, int, int]:
+def coord_key(row):
     return (row["slide_id"], row["tile_x"], row["tile_y"], row["patch_x"], row["patch_y"])
 
 
 def fuse_manifests(
-    clam_rows: list[dict],
-    cellvit_rows: list[dict],
-    artifacts_dir: Path,
-    fusion_method: str,
-    fused_dim: int,
-    missing_policy: str,
-) -> tuple[list[dict], int]:
-    cellvit_index = {coord_key(r): r for r in cellvit_rows}
-    fused_rows: list[dict] = []
-    missing = 0
-
+    clam_rows,
+    cellvit_rows,
+    artifacts_dir,
+    fusion_method="concat",
+    fused_dim=2048,
+    missing_policy="error",
+):
+    if fusion_method != "concat":
+        raise ValueError("The paper concatenates 1024-D context and 1024-D NFI descriptors")
+    if missing_policy not in ("error", "zeros"):
+        raise ValueError("missing_policy must be error or zeros")
+    keys = [coord_key(r) for r in clam_rows]
+    other = [coord_key(r) for r in cellvit_rows]
+    if len(set(keys)) != len(keys) or len(set(other)) != len(other):
+        raise ValueError("Duplicate feature coordinates")
+    cellvit_index = dict(zip(other, cellvit_rows))
+    fused_rows, missing = [], 0
     for c in clam_rows:
-        k = coord_key(c)
-        n = cellvit_index.get(k)
+        n = cellvit_index.get(coord_key(c))
         if n is None:
             missing += 1
+            if missing_policy == "error":
+                raise ValueError(f"No matching nuclei features at {coord_key(c)}")
         fused_rows.append(
             {
-                "slide_id": c["slide_id"],
-                "tile_x": c["tile_x"],
-                "tile_y": c["tile_y"],
-                "patch_x": c["patch_x"],
-                "patch_y": c["patch_y"],
+                **c,
                 "fusion_method": fusion_method,
                 "fused_dim": fused_dim,
                 "clam_feature_path": c["feature_path"],
@@ -38,12 +41,14 @@ def fuse_manifests(
                 "cellvit_missing": n is None,
                 "on_missing_nuclei": missing_policy,
                 "fused_feature_path": str(
-                    artifacts_dir
-                    / "fused"
+                    Path(artifacts_dir)
+                    / "tiles"
                     / c["slide_id"]
-                    / f"tx{c['tile_x']}_ty{c['tile_y']}_px{c['patch_x']}_py{c['patch_y']}.pt"
+                    / f"tx{c['tile_x']}_ty{c['tile_y']}.pt"
                 ),
             }
         )
-
+    extras = set(other) - set(keys)
+    if extras:
+        raise ValueError(f"{len(extras)} nuclei coordinates have no tissue features")
     return fused_rows, missing

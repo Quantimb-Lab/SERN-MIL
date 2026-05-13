@@ -9,7 +9,9 @@ from sern_mil.utils.io import ensure_dir
 def get_logger(name: str, log_dir: Path | None = None) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
-    logger.handlers.clear()
+    for handler in logger.handlers[:]:
+        handler.close()
+        logger.removeHandler(handler)
 
     fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     ch = logging.StreamHandler()

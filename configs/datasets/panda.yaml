@@ -1,11 +1,21 @@
+extends: ../default.yaml
 dataset:
   name: PANDA
   task: external_ood_grading
   split_file: data/splits/panda_external.csv
   classes:
-    - isup0
-    - isup1
-    - isup2
-    - isup3
-    - isup4
-    - isup5
+  - isup0
+  - isup1
+  - isup2
+  - isup3
+  - isup4
+  - isup5
+paths:
+  slide_manifest: data_index/panda_slides.jsonl
+  preproc_manifest: data_index/panda_patches.jsonl
+  clam_manifest: data_index/panda_clam.jsonl
+  cellvit_manifest: data_index/panda_nuclei.jsonl
+  ser_manifest: data_index/panda_tiles.jsonl
+  fused_manifest: data_index/panda_tiles.jsonl
+training:
+  stages: []

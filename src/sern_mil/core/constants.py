@@ -2,4 +2,4 @@ TILE_SIZE_DEFAULT = 4096
 PATCH_SIZE_DEFAULT = 256
 TARGET_MPP_DEFAULT = 0.50
 
-SUPPORTED_WSI_EXTENSIONS = (".svs", ".tif", ".tiff", ".ndpi", ".mrxs")
+SUPPORTED_WSI_EXTENSIONS = (".svs", ".tif", ".tiff", ".ndpi", ".mrxs", ".png", ".jpg", ".jpeg")

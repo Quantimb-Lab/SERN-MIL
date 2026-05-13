@@ -1,5 +1,7 @@
-experiment:
-  name: ablation_no_ser
-  use_ser: false
-  use_nfi: true
-  nfi_k: 4
+extends: ../default.yaml
+# Use independently prepared all-tissue bags for this control.
+training:
+  stages: [mil]
+  prepare_mil_from_annotations: false
+paths:
+  mil_manifest: data_index/no_ser_bags.jsonl

@@ -1,71 +1,150 @@
 project:
   name: sern_mil
-  seed: 1337
-  experiment: baseline_sern_mil
-
+  seed: 42
+  experiment: sern_mil
 paths:
-  root: .
-  data_root: data
   wsis_dir: data/wsi
   labels_dir: data/labels
   splits_dir: data/splits
   checkpoints_dir: checkpoints
-  data_index_dir: data_index
   artifacts_dir: artifacts
   logs_dir: artifacts/logs
   preproc_manifest: data_index/preprocess_manifest.jsonl
   clam_manifest: data_index/clam_features_manifest.jsonl
   cellvit_manifest: data_index/cellvit_features_manifest.jsonl
-  fused_manifest: data_index/fused_features_manifest.jsonl
-
+  fused_manifest: data_index/ser_tiles.jsonl
+  ser_manifest: data_index/ser_tiles.jsonl
+  mil_manifest: data_index/mil_bags.jsonl
+  student_manifest: data_index/student.jsonl
+  survival_manifest: data_index/survival.jsonl
+  slide_manifest: data_index/slides.jsonl
 preprocess:
-  target_mpp: 0.50
-  tissue_level: 4
+  target_mpp: 0.5
+  source_mpp: null
   tile_size: 4096
   patch_size: 256
-  min_tissue_ratio: 0.10
-  tissue_method: otsu_morphology
-  morphology_open_kernel: 3
-  hole_fill: true
-  normalize_orientation: true
-  save_patch_coords_only: true
-
+  min_tissue_ratio: 0.1
+  boundary_size: 11
+  gp_values:
+  - 3
+  - 4
+  - 5
 clam:
+  checkpoint: checkpoints/kimianet_encoder.ts
   encoder_name: kimianet
   output_dim: 1024
   output_format: pt
-  batch_size: 256
-  num_workers: 8
-
 cellvit:
-  checkpoint: checkpoints/cellvit_finetuned.ckpt
+  checkpoint: checkpoints/cellvit_extractor.ts
   output_dim: 128
   cluster_k: 4
-  batch_size: 128
-  num_workers: 8
-
+  student_checkpoint: checkpoints/student_best.pt
 fusion:
-  method: concat_linear
-  output_dim: 1024
-  on_missing_nuclei: zeros
-
-ser:
-  patch_embed_dim: 1024
-  latent_dim: 1024
-  num_latents: 64
-  num_transformer_blocks: 6
-  boundary_loss_weight: 0.3
-  tumor_loss_weight: 0.7
-
-mil:
-  hidden_dim: 512
-  num_classes: 4
-  attention_dropout: 0.1
-
+  method: concat
+  output_dim: 2048
+  on_missing_nuclei: error
+model:
+  ser:
+    token_dim: 1024
+    latent_dim: 1024
+    num_latents: 64
+    depth: 4
+    num_heads: 8
+    grid_side: 16
+    patch_size: 256
+    shallow_channels: 256
+    dropout: 0.1
+    decoder_chunk_size: 8
+    occupancy_threshold: 0.3
+  student:
+    embedding_dim: 1024
+    output_dim: 128
+    dropout: 0.1
+  grading:
+    token_dim: 1024
+    nuclei_dim: 128
+    descriptor_dim: 1024
+    num_clusters: 4
+    cluster_hidden_dim: 256
+    alpha: 1
+    hidden_dim: 512
+    dropout: 0.1
+  survival:
+    in_dim: 2062
+    hidden_dims:
+    - 512
+    - 128
+    dropout: 0.1
 training:
-  epochs: 100
-  lr: 1.0e-4
-  weight_decay: 1.0e-4
+  stages:
+  - ser
+  - mil
+  device: auto
   mixed_precision: true
-  grad_clip_norm: 1.0
-  early_stop_patience: 15
+  grad_clip_norm: 1
+  ema_decay: 0.999
+  prepare_mil_from_annotations: true
+  ser:
+    epochs: 40
+    lr: 0.0002
+    min_lr: 1.0e-06
+    weight_decay: 0.05
+    warmup_epochs: 5
+    start_lr: 1.0e-06
+    patience: 8
+    accumulation_steps: 4
+    boundary_sampling_probability: 0.7
+  student:
+    epochs: 100
+    lr: 0.001
+    min_lr: 1.0e-05
+    weight_decay: 0.01
+    warmup_epochs: 0
+    patience: 10
+    batch_size: 1024
+  mil:
+    epochs: 25
+    lr: 0.0002
+    min_lr: 0
+    weight_decay: 0.05
+    warmup_epochs: 3
+    start_lr: 1.0e-05
+    patience: 5
+  survival:
+    epochs: 150
+    lr: 0.001
+    min_lr: 1.0e-06
+    weight_decay: 0.01
+    warmup_epochs: 5
+    seeds:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    l2_lambda: 0.0
+inference:
+  device: auto
+  ser_checkpoint: checkpoints/ser_best.pt
+  mil_checkpoint: checkpoints/mil_best.pt
+  survival_checkpoint: null
+  min_region_patches: 4
+  secondary_threshold: 0.05
+evaluation:
+  kappa_weights: quadratic
+  kappa_classes:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  macro_classes:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  ece_bins: 15
+augmentation:
+  enabled: true

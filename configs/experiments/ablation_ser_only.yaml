@@ -1,4 +1,6 @@
-experiment:
-  name: ablation_ser_only
-  use_ser: true
-  use_nfi: false
+extends: ../default.yaml
+# Cache zero nuclei descriptors for this control; use the same data splits.
+paths:
+  mil_manifest: data_index/ser_only_bags.jsonl
+training:
+  prepare_mil_from_annotations: false

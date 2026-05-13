@@ -1,19 +1,3 @@
+extends: default.yaml
 project:
-  name: sern_mil
-  seed: 1337
   experiment: inference_pipeline
-
-paths:
-  root: .
-  data_root: data
-  wsis_dir: data/wsi
-  labels_dir: data/labels
-  splits_dir: data/splits
-  checkpoints_dir: checkpoints
-  data_index_dir: data_index
-  artifacts_dir: artifacts
-  logs_dir: artifacts/logs
-  preproc_manifest: data_index/preprocess_manifest.jsonl
-  clam_manifest: data_index/clam_features_manifest.jsonl
-  cellvit_manifest: data_index/cellvit_features_manifest.jsonl
-  fused_manifest: data_index/fused_features_manifest.jsonl

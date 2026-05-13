@@ -4,10 +4,11 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
-artifacts/
-data/
-data_index/*.jsonl
-checkpoints/
+/artifacts/
+/data/
+/data_index/*.jsonl
+/checkpoints/
 wandb/
 *.pt
 *.h5
+*.egg-info/

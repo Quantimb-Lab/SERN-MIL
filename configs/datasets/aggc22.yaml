@@ -1,9 +1,10 @@
+extends: ../default.yaml
 dataset:
   name: AGGC22
   task: gp_detection_grading
   split_file: data/splits/aggc22_split.csv
   classes:
-    - benign
-    - gp3
-    - gp4
-    - gp5
+  - benign
+  - gp3
+  - gp4
+  - gp5
