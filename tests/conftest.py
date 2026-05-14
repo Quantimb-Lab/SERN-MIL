@@ -74,6 +74,7 @@ def tensor_data(tiny_cfg):
                 "split": split,
                 "patient_id": patient,
                 "slide_id": patient,
+                "specimen_type": "prostatectomy",
                 "tile_x": 0,
                 "tile_y": 0,
                 "cache_path": str(path),

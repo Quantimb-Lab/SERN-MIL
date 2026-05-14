@@ -48,6 +48,7 @@ def test_preprocess_and_extract_write_actual_feature_tensors(tiny_cfg):
                 "label_path": str(label_path),
                 "patient_id": "p",
                 "dataset": "AGGC22",
+                "specimen_type": "biopsy",
                 "split": "train",
             }
         ],
@@ -68,6 +69,7 @@ def test_preprocess_and_extract_write_actual_feature_tensors(tiny_cfg):
     run_fusion(cfg)
     tiles = read_jsonl(cfg.path("paths.ser_manifest"))
     assert tiles and len(tiles) * 4 == len(rows)
+    assert all(row["specimen_type"] == "biopsy" for row in tiles)
     value = load_tensor_cache(tiles[0]["cache_path"])
     assert value["tokens"].shape == (4, 8)
     assert value["shallow_features"].shape == (4, 4, 16, 16)

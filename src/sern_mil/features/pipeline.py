@@ -254,6 +254,7 @@ def run_fusion(cfg):
                 "patient_id",
                 "dataset",
                 "split",
+                "specimen_type",
                 "slide_path",
                 "original_slide_id",
                 "is_augmented",

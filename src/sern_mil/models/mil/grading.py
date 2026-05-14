@@ -18,7 +18,50 @@ ISUP = {
 }
 
 
-def grade_from_regions(regions, secondary_threshold=0.05):
+SPECIMEN_TYPES = ("biopsy", "prostatectomy")
+
+
+def _specimen_type(value):
+    if not isinstance(value, str) or value.strip().lower() not in SPECIMEN_TYPES:
+        raise ValueError("specimen_type must be biopsy or prostatectomy")
+    return value.strip().lower()
+
+
+def resolve_specimen_type(rows, configured=None):
+    """Resolve the policy from slide metadata, explicit config, or a known cohort."""
+    if not rows:
+        raise ValueError("No slide metadata available to resolve specimen_type")
+    configured = None if configured == "auto" else configured
+    explicit = _specimen_type(configured) if configured is not None else None
+    declared = {_specimen_type(row["specimen_type"]) for row in rows if row.get("specimen_type")}
+    datasets = {str(row["dataset"]).strip().upper() for row in rows if row.get("dataset")}
+    if len(declared) > 1 or len(datasets) > 1:
+        raise ValueError("Tile caches for one slide contain conflicting specimen metadata")
+    if declared:
+        specimen = next(iter(declared))
+        if explicit is not None and explicit != specimen:
+            raise ValueError("Configured specimen_type conflicts with the slide metadata")
+        return specimen
+    if explicit is not None:
+        return explicit
+    if datasets == {"PANDA"}:
+        return "biopsy"
+    if datasets == {"LEOPARD"}:
+        return "prostatectomy"
+    raise ValueError(
+        "Specify biopsy or prostatectomy in the slide manifest or inference.specimen_type; "
+        "mixed cohorts such as AGGC22 cannot use an inferred cohort-wide rule"
+    )
+
+
+def grade_from_regions(regions, secondary_threshold=0.05, *, specimen_type):
+    """Use the most prevalent GP plus the highest eligible additional pattern.
+
+    Biopsies always retain the highest observed GP, even below the cutoff.
+    Other minor patterns, and all additional prostatectomy patterns, must reach
+    the cutoff. The default cutoff includes a pattern at exactly 5%.
+    """
+    specimen_type = _specimen_type(specimen_type)
     if not 0 <= secondary_threshold < 1:
         raise ValueError("secondary_threshold must be in [0, 1)")
     areas, confidence = dict.fromkeys(GP_LABELS, 0.0), dict.fromkeys(GP_LABELS, 0.0)
@@ -33,13 +76,21 @@ def grade_from_regions(regions, secondary_threshold=0.05):
     if not total:
         return {"predicted_isup": 0, "gleason_score": None, "gp_proportions": proportions}
     order = sorted(
-        GP_LABELS,
+        (gp for gp in GP_LABELS if areas[gp] > 0),
         key=lambda gp: (areas[gp], confidence[gp] / areas[gp] if areas[gp] else 0, gp),
         reverse=True,
     )
-    primary, secondary = order[:2]
-    if areas[secondary] / total <= secondary_threshold:
-        secondary = primary
+    primary = order[0]
+    eligible = [primary] + [gp for gp in order[1:] if areas[gp] / total >= secondary_threshold]
+    if specimen_type == "biopsy":
+        highest = max(order)
+        if highest not in eligible:
+            eligible.append(highest)
+    highest = max(eligible)
+    if highest != primary:
+        secondary = highest
+    else:
+        secondary = next((gp for gp in order[1:] if gp in eligible), primary)
     return {
         "predicted_isup": ISUP[(primary, secondary)],
         "gleason_score": f"{primary}+{secondary}",

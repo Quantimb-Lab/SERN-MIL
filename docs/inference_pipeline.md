@@ -13,6 +13,27 @@ Architecture dimensions are restored from each checkpoint. It uses the predicted
 tumor/boundary maps for retrieval and bag formation. Reference GP masks and target
 masks present in a cache are ignored.
 
+## Specimen-specific grading
+
+Use `specimen_type: biopsy` or `specimen_type: prostatectomy` in each slide
+manifest record. Feature preparation carries this field into the tile manifest.
+For existing tensor caches, add it to the corresponding `paths.ser_manifest`
+records without regenerating the feature tensors.
+
+The default `inference.specimen_type: auto` resolves the type from metadata;
+without it, PANDA resolves to biopsy and LEOPARD to prostatectomy. AGGC22 contains
+both specimen types, so each slide needs metadata or an explicit configuration
+for a uniform cohort. Conflicting metadata/configuration raises an error.
+Every inference result records the resolved type.
+
+Biopsy scoring retains the highest GP even below 5%, while minor lower-grade
+secondary patterns require at least 5%. Prostatectomy scoring requires an
+additional pattern to reach 5%, and uses the highest eligible GP when higher than
+the primary. Thus, 60% GP4 + 37% GP3 + 3% GP5 gives `4+5` on biopsy and `4+3`
+on prostatectomy. A lower-grade secondary pattern at exactly 5% is included.
+
+The direct `grade_from_regions` API also requires the `specimen_type` keyword.
+
 For each slide the output includes:
 
 - ISUP grade, Gleason score, and GP area proportions.

@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 from sern_mil.data.cache import load_manifest, load_tensor_cache
-from sern_mil.models.mil.grading import grade_from_regions
+from sern_mil.models.mil.grading import grade_from_regions, resolve_specimen_type
 from sern_mil.models.mil.region_bagging import BoundaryTiles, build_region_bags
 from sern_mil.models.survival.cox_head import median_time, risk_group
 from sern_mil.training.loops import load_checkpoint_model, resolve_device
@@ -30,6 +30,7 @@ def predict_slide(cfg, slide_path, models=None):
         raise ValueError(
             f"No encoded tile caches found for {slide_path.stem}; run the feature pipeline first"
         )
+    specimen_type = resolve_specimen_type(rows, cfg.get("inference.specimen_type", "auto"))
     ser, grading, device = models or load_grading_models(cfg)
     side, patch = ser.grid_side, ser.patch_size
     masks, patches = BoundaryTiles(side * patch, patch), []
@@ -96,7 +97,12 @@ def predict_slide(cfg, slide_path, models=None):
             coordinates.extend([[p["x"], p["y"]] for p in bag])
         result = {
             "slide_id": slide_path.stem,
-            **grade_from_regions(regions, cfg.get("inference.secondary_threshold", 0.05)),
+            "specimen_type": specimen_type,
+            **grade_from_regions(
+                regions,
+                cfg.get("inference.secondary_threshold", 0.05),
+                specimen_type=specimen_type,
+            ),
             "regions": regions,
         }
         path = cfg.path("paths.artifacts_dir") / "gp_masks" / f"{slide_path.stem}.npz"

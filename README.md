@@ -25,7 +25,7 @@ Whole-slide image
 | Region selection | At least 30% tumor occupancy; boundary-separated regions of four or more patches |
 | NFI | 128-D nuclei features, four learned clusters, 1024-D patch descriptor |
 | Regional MIL | 2048-D combined descriptors; GP3, GP4, and GP5 classification |
-| Slide grading | GP area proportions with a 5% secondary-pattern cutoff |
+| Slide grading | GP area proportions with specimen-specific minor-pattern rules |
 | Optional BCR head | 2048-D pooled descriptor plus a supplied 14-D morphology vector |
 
 NFI uses positive squared dot-product scores for soft assignment:
@@ -36,6 +36,11 @@ weights = softmax(alpha * (features @ prototypes.T)**2, dim=-1)
 
 Cluster-wise weighted sums are concatenated and projected to the nuclei descriptor.
 A benign slide is assigned ISUP 0 and has no Gleason score.
+
+Biopsy scores always include the highest observed GP, even below 5%. Minor
+lower-grade patterns are included at 5% or more. Prostatectomy scores include an
+additional higher-grade pattern only when it reaches 5%. For example, 60% GP4,
+37% GP3, and 3% GP5 gives `4+5` for a biopsy and `4+3` for a prostatectomy.
 
 ## Installation
 
@@ -70,6 +75,7 @@ Create `data_index/slides.jsonl` with one JSON object per slide, on one line:
 | `slide_path` | Path to the whole-slide image |
 | `patient_id` | Patient identifier used to keep splits separate |
 | `dataset` | Dataset name, such as `AGGC22` or `PANDA` |
+| `specimen_type` | `biopsy` or `prostatectomy`; needed for mixed cohorts such as AGGC22 |
 | `split` | `train`, `val`, or `test` |
 | `label_path` | GP label-mask path, required for annotated training bags |
 | `isup` | Reference slide-level grade, required for evaluation |
@@ -153,6 +159,12 @@ sern-mil predict --config configs/inference_pipeline.yaml --wsis-dir data/wsi
 
 Inference forms regional bags from the predicted tumor and boundary masks.
 Reference GP masks are not used.
+
+Inference uses the slide's `specimen_type` metadata. Without that field, PANDA
+defaults to biopsy and LEOPARD to prostatectomy. For a mixed cohort, provide the
+field in the slide manifest or set `inference.specimen_type` for a uniform batch.
+Existing tile caches can use the field directly in `paths.ser_manifest`.
+Each prediction records the resolved specimen type.
 
 | Output | Location |
 | --- | --- |

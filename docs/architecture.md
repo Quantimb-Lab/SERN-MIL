@@ -36,8 +36,20 @@ pixel area, including where a patch intersects more than one pattern.
 The sparse GP mask output stores global patch coordinates, class labels, and
 patch size. Region areas are measured on this patch grid. Primary and secondary
 patterns follow area fractions; equal areas use mean MIL confidence and then
-the higher GP. The secondary fraction must exceed 0.05. The rule applies to both
-specimen types in this implementation.
+the higher GP.
+
+Slide grading requires an explicit specimen type. For biopsies, the highest
+observed GP always enters the score, including when its area is below 5%.
+Other minor patterns must reach 5% to enter as a secondary pattern. For
+prostatectomies, additional patterns must reach 5%; the highest eligible pattern
+is used when it is higher than the primary GP. Exactly 5% is included.
+Minor patterns remain in the GP mask and proportions even when excluded from
+the Gleason score.
+
+For example, GP3/GP4/GP5 proportions of 37%/60%/3% produce `4+5` on biopsy
+and `4+3` on prostatectomy. Proportions of 60%/30%/10% produce `3+5` on
+prostatectomy because GP5 reaches the cutoff. See the
+[2019 ISUP consensus](https://pmc.ncbi.nlm.nih.gov/articles/PMC7382533/).
 
 ## BCR
 

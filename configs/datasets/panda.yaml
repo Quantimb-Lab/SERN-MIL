@@ -19,3 +19,5 @@ paths:
   fused_manifest: data_index/panda_tiles.jsonl
 training:
   stages: []
+inference:
+  specimen_type: biopsy

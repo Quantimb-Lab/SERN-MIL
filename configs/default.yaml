@@ -130,6 +130,7 @@ inference:
   survival_checkpoint: null
   min_region_patches: 4
   secondary_threshold: 0.05
+  specimen_type: auto
 evaluation:
   kappa_weights: quadratic
   kappa_classes:

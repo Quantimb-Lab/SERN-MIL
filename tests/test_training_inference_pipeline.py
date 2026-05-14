@@ -8,6 +8,7 @@ from sern_mil.data.cache import load_tensor_cache
 from sern_mil.inference.pipeline import InferencePipeline
 from sern_mil.training.loops import load_checkpoint_model
 from sern_mil.training.pipeline import TrainingPipeline
+from sern_mil.utils.io import read_jsonl, write_jsonl
 
 
 def test_missing_inputs_do_not_report_success(tiny_cfg):
@@ -77,6 +78,32 @@ def test_inference_uses_predicted_masks_and_real_heads(tensor_data, tumor_presen
     output = InferencePipeline(cfg).run(slide=slide)
     record = json.loads(output.read_text())[0]
     assert record["predicted_isup"] == expected
+    assert record["specimen_type"] == "prostatectomy"
     assert record["gleason_score"] == ("4+4" if tumor_present else None)
     assert bool(record["regions"]) == tumor_present
     assert all(r["gp"] == 4 for r in record["regions"])
+
+
+def test_panda_inference_routes_to_biopsy_policy(tensor_data, monkeypatch):
+    import sern_mil.inference.predict_wsi as prediction
+
+    cfg = tensor_data
+    save_controlled_models(cfg, True)
+    rows = read_jsonl(cfg.path("paths.ser_manifest"))
+    for row in rows:
+        row.update(dataset="PANDA", split="test")
+        row.pop("specimen_type")
+    write_jsonl(cfg.path("paths.ser_manifest"), rows)
+    calls = []
+    original = prediction.grade_from_regions
+
+    def observe(regions, secondary_threshold, *, specimen_type):
+        calls.append(specimen_type)
+        return original(regions, secondary_threshold, specimen_type=specimen_type)
+
+    monkeypatch.setattr(prediction, "grade_from_regions", observe)
+    slide = cfg.root_dir / "p1.svs"
+    slide.touch()
+    output = InferencePipeline(cfg).run(slide=slide)
+    assert calls == ["biopsy"]
+    assert json.loads(output.read_text())[0]["specimen_type"] == "biopsy"
